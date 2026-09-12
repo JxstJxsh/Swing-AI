@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>PurePlane AI - Mobile Range Trial</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --card-bg: rgba(18, 24, 33, 0.85);
+      --accent-green: #00e676;
+      --accent-cyan: #00e5ff;
+      --accent-orange: #ff9100;
+      --accent-red: #ff5252;
+      --text: #ffffff;
+      --text-dim: #90a4ae;
+      --border: rgba(255, 255, 255, 0.12);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Roboto, sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    /* Tab Navigation */
+    .tab-bar {
+      display: flex;
+      background: #101721;
+      border-bottom: 1px solid var(--border);
+      padding-top: env(safe-area-inset-top, 10px);
+      z-index: 100;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 14px 10px;
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border: none;
+      background: transparent;
+      color: var(--text-dim);
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+    .tab-btn.active {
+      color: var(--accent-green);
+      border-bottom: 2px solid var(--accent-green);
+    }
+    /* Main Viewport */
+    .view-container {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+    .view {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+    }
+    .view.active { display: flex; }
+
+    /* Live Camera & HUD */
+    #camera-video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #000;
+    }
+    .overlay-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    .hud-header {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 20;
+    }
+    .badge {
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-orange);
+    }
+    .dot.active { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
+    .club-select {
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 6px 12px;
+      border-radius: 20px;
+      outline: none;
+    }
+    .hud-footer {
+      position: absolute;
+      bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+      left: 12px;
+      right: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 20;
+    }
+    .cue-banner {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--accent-cyan);
+      padding: 10px 14px;
+      border-radius: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .cue-text { font-size: 13px; font-weight: 600; color: #fff; }
+    .cue-tempo { font-size: 11px; color: var(--text-dim); font-family: monospace; }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+    }
+    .metric-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 4px;
+      text-align: center;
+    }
+    .metric-label { font-size: 9px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; margin-bottom: 2px; }
+    .metric-value { font-size: 15px; font-weight: 900; font-family: monospace; }
+    .metric-value.good { color: var(--accent-green); }
+    .metric-value.warn { color: var(--accent-orange); }
+    .metric-value.bad { color: var(--accent-red); }
+
+    /* Action Trigger Bar */
+    .controls-row {
+      display: flex;
+      gap: 8px;
+    }
+    .btn {
+      flex: 1;
+      padding: 12px;
+      border-radius: 12px;
+      border: none;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .btn-primary { background: var(--accent-green); color: #000; }
+    .btn-secondary { background: rgba(255,255,255,0.15); backdrop-filter: blur(10px); color: #fff; }
+
+    /* 3D Scrubber View */
+    #three-container {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+    .scrubber-controls {
+      position: absolute;
+      bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+      left: 12px;
+      right: 12px;
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 20;
+    }
+    .phase-buttons {
+      display: flex;
+      gap: 6px;
+    }
+    .phase-btn {
+      flex: 1;
+      padding: 6px 0;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.05);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .phase-btn.active {
+      background: var(--accent-cyan);
+      color: #000;
+      border-color: var(--accent-cyan);
+    }
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .scrubber-slider {
+      flex: 1;
+      -webkit-appearance: none;
+      height: 6px;
+      border-radius: 3px;
+      background: rgba(255,255,255,0.2);
+      outline: none;
+    }
+    .scrubber-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--accent-cyan);
+      cursor: pointer;
+    }
+    .drill-prescription {
+      background: rgba(0, 229, 255, 0.08);
+      border: 1px solid rgba(0, 229, 255, 0.25);
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+    .drill-title { font-weight: 800; color: var(--accent-cyan); margin-bottom: 2px; }
+  </style>
+</head>
+<body>
+
+  <!-- Top Tab Bar -->
+  <nav class="tab-bar">
+    <button class="tab-btn active" id="tab-range" onclick="switchTab('range')">Live Range</button>
+    <button class="tab-btn" id="tab-3d" onclick="switchTab('3d')">3D Plane Scrubber</button>
+  </nav>
+
+  <div class="view-container">
+    <!-- VIEW 1: LIVE RANGE CAPTURE -->
+    <div class="view active" id="view-range">
+      <video id="camera-video" playsinline autoplay muted></video>
+
+      <!-- Down-The-Line HUD Reticle -->
+      <svg class="overlay-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <!-- Target Line (Vertical center) -->
+        <line x1="50" y1="0" x2="50" y2="100" stroke="rgba(255,145,0,0.4)" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- Hand Plane Reference Line (Horizontal) -->
+        <line x1="0" y1="58" x2="100" y2="58" stroke="rgba(0,229,255,0.3)" stroke-width="0.5"/>
+        <!-- Address Ball Target Box -->
+        <rect x="47" y="78" width="6" height="6" fill="none" stroke="#00e676" stroke-width="0.5"/>
+      </svg>
+
+      <!-- Header Elements -->
+      <div class="hud-header">
+        <div class="badge">
+          <div class="dot" id="audio-dot"></div>
+          <span id="audio-status">AUDIO STANDBY</span>
+        </div>
+        <select class="club-select" id="club-select">
+          <option value="driver">Driver (9.0°)</option>
+          <option value="iron" selected>7-Iron (34°)</option>
+          <option value="wedge">56° Wedge</option>
+        </select>
+      </div>
+
+      <!-- Footer Elements: Telemetry + Trigger Controls -->
+      <div class="hud-footer">
+        <div class="cue-banner">
+          <span class="cue-text" id="cue-text">Arm system or simulate swing</span>
+          <span class="cue-tempo" id="cue-tempo">TEMPO --:1</span>
+        </div>
+
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-label">Club Path</div>
+            <div class="metric-value good" id="m-path">+1.8°</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Face/Path</div>
+            <div class="metric-value good" id="m-face">-0.8°</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Whip Ratio</div>
+            <div class="metric-value good" id="m-whip">4.2x</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Head Speed</div>
+            <div class="metric-value" id="m-speed">84 mph</div>
+          </div>
+        </div>
+
+        <div class="controls-row">
+          <button class="btn btn-primary" id="start-btn" onclick="initSensors()">Arm Live Range</button>
+          <button class="btn btn-secondary" onclick="simulateSwingStrike()">Simulate Strike</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 2: 3D PLANE SCRUBBER -->
+    <div class="view" id="view-3d">
+      <div id="three-container"></div>
+
+      <div class="scrubber-controls">
+        <div class="phase-buttons">
+          <button class="phase-btn" onclick="seekPhase(0)">P4: Top</button>
+          <button class="phase-btn" onclick="seekPhase(35)">P5: Shallow</button>
+          <button class="phase-btn" onclick="seekPhase(42)">P6: Delivery</button>
+          <button class="phase-btn active" onclick="seekPhase(45)">P7: Impact</button>
+          <button class="phase-btn" onclick="seekPhase(58)">P8: Release</button>
+        </div>
+
+        <div class="slider-row">
+          <input type="range" class="scrubber-slider" id="swing-slider" min="0" max="59" value="45" oninput="onScrub(this.value)" />
+          <span id="frame-counter" style="font-size: 11px; font-family: monospace; min-width: 32px;">45/59</span>
+        </div>
+
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-label">Shaft Lean</div>
+            <div class="metric-value good" id="s-lean">+8.8°</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Attack Angle</div>
+            <div class="metric-value" id="s-aoa">-4.2°</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Dynamic Loft</div>
+            <div class="metric-value" id="s-loft">24.5°</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Hand Decel</div>
+            <div class="metric-value good" id="s-decel">-14.2 G</div>
+          </div>
+        </div>
+
+        <div class="drill-prescription" id="drill-box">
+          <div class="drill-title">Recommended Drill: Motorcycle Wrist Flexion</div>
+          Maintain lead wrist flexion from P5 to delivery to prevent open-face steepening compensations.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* =====================================================================
+       1. GLOBAL STATE & TAB NAVIGATION
+       ===================================================================== */
+    let currentTab = 'range';
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.getElementById(`tab-${tab}`).classList.add('active');
+      document.getElementById(`view-${tab}`).classList.add('active');
+      if (tab === '3d') {
+        onWindowResize();
+      }
+    }
+
+    /* =====================================================================
+       2. WEBAUDIO & REAL-TIME SPEECH SYNTHESIS ENGINE
+       ===================================================================== */
+    let audioCtx = null;
+    let analyser = null;
+    let audioStream = null;
+    let isArmed = false;
+    let speechVoice = null;
+    let lastTriggerTime = 0;
+
+    function initSpeech() {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.onvoiceschanged = () => {
+          const voices = window.speechSynthesis.getVoices();
+          speechVoice = voices.find(v => v.lang.startsWith('en')) || voices[0];
+        };
+        // Pre-warm synthesizer
+        const warmUp = new SpeechSynthesisUtterance('');
+        warmUp.volume = 0;
+        window.speechSynthesis.speak(warmUp);
+      }
+    }
+
+    function playEarconChime() {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1400, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.08);
+    }
+
+    function speakCoachingCue(text) {
+      if (!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.25; // 1.25x cadence to deliver feedback in <1.2s
+      utterance.pitch = 1.0;
+      if (speechVoice) utterance.voice = speechVoice;
+      window.speechSynthesis.speak(utterance);
+    }
+
+    async function initSensors() {
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContextClass();
+        initSpeech();
+
+        // Request Camera + Mic streams
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: true
+        });
+
+        // Attach video stream
+        const video = document.getElementById('camera-video');
+        video.srcObject = stream;
+
+        // Attach audio processing for acoustic transient detection (2.5k - 5k Hz)
+        audioStream = stream;
+        const source = audioCtx.createMediaStreamSource(stream);
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 512;
+        source.connect(analyser);
+
+        isArmed = true;
+        document.getElementById('audio-dot').classList.add('active');
+        document.getElementById('audio-status').innerText = 'ACOUSTIC ARMED';
+        document.getElementById('start-btn').innerText = 'Range Active';
+        document.getElementById('start-btn').style.background = '#00c853';
+
+        monitorAcousticStream();
+      } catch (err) {
+        alert("Camera/Audio Access: Ensure HTTPS is used and microphone/camera permissions are allowed.");
+        console.error(err);
+      }
+    }
+
+    function monitorAcousticStream() {
+      if (!isArmed || !analyser) return;
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(data);
+
+      // High frequency modal band bins (~2.5 kHz to 5.5 kHz)
+      let highBandSum = 0;
+      let totalSum = 0;
+      const startBin = Math.floor(analyser.frequencyBinCount * 0.25);
+      const endBin = Math.floor(analyser.frequencyBinCount * 0.65);
+
+      for (let i = 0; i < data.length; i++) {
+        totalSum += data[i];
+        if (i >= startBin && i <= endBin) highBandSum += data[i];
+      }
+
+      const ratio = highBandSum / (totalSum + 1e-4);
+      const now = performance.now();
+
+      // Sharp acoustic spike in high frequency band triggers impact
+      if (ratio > 0.48 && highBandSum > 2200 && (now - lastTriggerTime > 3000)) {
+        lastTriggerTime = now;
+        executeStrikeAnalysis();
+      }
+      requestAnimationFrame(monitorAcousticStream);
+    }
+
+    /* =====================================================================
+       3. SWING METRICS SIMULATION & PREPARATION
+       ===================================================================== */
+    function simulateSwingStrike() {
+      if (!audioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContextClass();
+        initSpeech();
+      }
+      executeStrikeAnalysis();
+    }
+
+    function executeStrikeAnalysis() {
+      playEarconChime();
+
+      // Realistic stochastic kinematics for iron strike
+      const path = (Math.random() * 3.5 - 1.0).toFixed(1); // -1.0° to +2.5°
+      const face = (Math.random() * 2.0 - 1.2).toFixed(1);
+      const tempo = (2.9 + Math.random() * 0.4).toFixed(1);
+      const whip = (3.8 + Math.random() * 0.6).toFixed(2);
+      const speed = Math.floor(82 + Math.random() * 6);
+
+      // Update HUD
+      document.getElementById('m-path').innerText = `${path >= 0 ? '+' : ''}${path}°`;
+      document.getElementById('m-face').innerText = `${face >= 0 ? '+' : ''}${face}°`;
+      document.getElementById('m-whip').innerText = `${whip}x`;
+      document.getElementById('m-speed').innerText = `${speed} mph`;
+      document.getElementById('cue-tempo').innerText = `TEMPO ${tempo}:1`;
+
+      // Build concise cue and deliver via SpeechSynthesis
+      const pathDir = path >= 0 ? "inside" : "outside";
+      const cueStr = `Path ${Math.abs(path)} ${pathDir}. Tempo ${tempo}.`;
+      document.getElementById('cue-text').innerText = cueStr;
+      speakCoachingCue(cueStr);
+    }
+
+    /* =====================================================================
+       4. THREE.JS 3D SWING PLANE & SCRUBBER
+       ===================================================================== */
+    let scene, camera, renderer, shaftCylinder, clubheadBox, trajectoryLine;
+    const TOTAL_FRAMES = 60;
+    let swingData = [];
+
+    function init3DScene() {
+      const container = document.getElementById('three-container');
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0a0e14);
+
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+      camera.position.set(-2.4, 1.2, 2.0); // Down-The-Line elevated angle
+      camera.lookAt(0, 0.4, 0);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      container.appendChild(renderer.domElement);
+
+      // Lighting
+      const ambLight = new THREE.AmbientLight(0xffffff, 0.8);
+      scene.add(ambLight);
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+      dirLight.position.set(3, 5, 2);
+      scene.add(dirLight);
+
+      // Turf Grid (Z=0)
+      const grid = new THREE.GridHelper(6, 20, 0x00e676, 0x1f2c38);
+      grid.position.y = 0;
+      scene.add(grid);
+
+      // Target Line (Orange line along X axis)
+      const targetGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-3, 0.005, 0),
+        new THREE.Vector3(3, 0.005, 0)
+      ]);
+      const targetMat = new THREE.LineBasicMaterial({ color: 0xff9100, linewidth: 2 });
+      scene.add(new THREE.Line(targetGeo, targetMat));
+
+      // Golf Ball at Origin
+      const ballGeo = new THREE.SphereGeometry(0.021, 16, 16);
+      const ballMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
+      const ball = new THREE.Mesh(ballGeo, ballMat);
+      ball.position.set(0, 0.021, 0);
+      scene.add(ball);
+
+      // Dynamic Club Assembly
+      const shaftGeo = new THREE.CylinderGeometry(0.006, 0.006, 0.94, 16);
+      const shaftMat = new THREE.MeshStandardMaterial({ color: 0xffd600, metalness: 0.6, roughness: 0.3 });
+      shaftCylinder = new THREE.Mesh(shaftGeo, shaftMat);
+      scene.add(shaftCylinder);
+
+      const headGeo = new THREE.BoxGeometry(0.09, 0.04, 0.05);
+      const headMat = new THREE.MeshStandardMaterial({ color: 0xcfd8dc, metalness: 0.8 });
+      clubheadBox = new THREE.Mesh(headGeo, headMat);
+      scene.add(clubheadBox);
+
+      // Generate Parametric Swing Arc Data
+      generateSwingData();
+
+      // Trajectory Polyline
+      const points = swingData.map(d => d.head);
+      const trajGeo = new THREE.BufferGeometry().setFromPoints(points);
+      const trajMat = new THREE.LineBasicMaterial({ color: 0x00e5ff, linewidth: 2 });
+      trajectoryLine = new THREE.Line(trajGeo, trajMat);
+      scene.add(trajectoryLine);
+
+      // Initialize at Impact (Frame 45)
+      update3DPose(45);
+
+      window.addEventListener('resize', onWindowResize);
+      animate();
+    }
+
+    function generateSwingData() {
+      const impactIdx = 45;
+      for (let i = 0; i < TOTAL_FRAMES; i++) {
+        const u = (i - impactIdx) / 15.0; // u = 0 at impact
+        // Spatial trajectory coordinates (meters)
+        const x = u * 0.42;
+        const z = 0.32 * (u * u) - 0.02 * u; // Lateral shallowing
+        const y = Math.max(0.0, 0.38 * (u * u) + (u < 0 ? -0.04 * u : 0.02 * u)); // Height
+
+        const headPos = new THREE.Vector3(x, y, z);
+        // Dynamic Shaft Lean (+9 deg lean at impact)
+        const forwardLean = 0.09 + u * 0.02;
+        const gripPos = new THREE.Vector3(x + forwardLean, y + 0.88, z + 0.28);
+
+        swingData.push({ head: headPos, grip: gripPos, u: u });
+      }
+    }
+
+    function update3DPose(frameIdx) {
+      if (!swingData[frameIdx]) return;
+      const data = swingData[frameIdx];
+
+      // Update Shaft Cylinder position and orientation
+      const vStart = data.head;
+      const vEnd = data.grip;
+      const midpoint = new THREE.Vector3().addVectors(vStart, vEnd).multiplyScalar(0.5);
+      shaftCylinder.position.copy(midpoint);
+
+      const direction = new THREE.Vector3().subVectors(vEnd, vStart).normalize();
+      const canonical = new THREE.Vector3(0, 1, 0);
+      shaftCylinder.quaternion.setFromUnitVectors(canonical, direction);
+
+      // Update Clubhead Box
+      clubheadBox.position.copy(vStart);
+      clubheadBox.quaternion.copy(shaftCylinder.quaternion);
+
+      // Scrubber Telemetry Cards
+      const leanDeg = (Math.atan2(vEnd.x - vStart.x, vEnd.y - vStart.y) * 180 / Math.PI).toFixed(1);
+      document.getElementById('s-lean').innerText = `${leanDeg >= 0 ? '+' : ''}${leanDeg}°`;
+      document.getElementById('frame-counter').innerText = `${frameIdx}/59`;
+    }
+
+    function onScrub(val) {
+      update3DPose(parseInt(val, 10));
+    }
+
+    function seekPhase(idx) {
+      document.getElementById('swing-slider').value = idx;
+      update3DPose(idx);
+      document.querySelectorAll('.phase-btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+    }
+
+    function onWindowResize() {
+      if (!camera || !renderer) return;
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (currentTab === '3d' && renderer && scene && camera) {
+        renderer.render(scene, camera);
+      }
+    }
+
+    // Initialize 3D Engine on page load
+    window.addEventListener('DOMContentLoaded', () => {
+      init3DScene();
+    });
+  </script>
+</body>
+</html>
